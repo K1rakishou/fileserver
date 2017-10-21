@@ -36,12 +36,14 @@ class ApiHandler(private val fs: FileSystem,
                 .map(this::checkRequestContainsFile)
                 .flatMap(this::waitForRemainingParts)
                 .flatMap(this::writeToStorage)
-                .flatMap { fileInfo ->
-                    repo.save(StoredFile(fileInfo.newFileName,
-                            fileInfo.originalName, System.currentTimeMillis()))
-                }
+                .flatMap(this::saveFileInfoToDb)
                 .flatMap { ServerResponse.ok().body(Mono.just("ok")) }
                 .onErrorResume(this::handleError)
+    }
+
+    private fun saveFileInfoToDb(fileInfo: FileInfo): Mono<StoredFile> {
+        return repo.save(StoredFile(fileInfo.newFileName,
+                fileInfo.originalName, System.currentTimeMillis()))
     }
 
     private fun waitForRemainingParts(it: Pair<Part, String>): Mono<Tuple2<MutableList<DataBuffer>, String>>? {
