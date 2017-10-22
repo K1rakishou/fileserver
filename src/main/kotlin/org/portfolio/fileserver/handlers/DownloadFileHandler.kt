@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.web.reactive.function.server.ServerRequest
 import org.springframework.web.reactive.function.server.ServerResponse
 import org.springframework.web.reactive.function.server.body
+import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
 class DownloadFileHandler(private val fs: FileSystem,
@@ -22,13 +23,16 @@ class DownloadFileHandler(private val fs: FileSystem,
         return Mono.just(request.pathVariable("file_name"))
                 .flatMap { fileName -> repo.findById(fileName) }
                 .flatMap { storedFile ->
-                    //FIXME: we need to somehow close the input stream after we are done reading, dunno how to do that atm
-                    val inputStream = fs.open(Path(fileDirectoryPath, storedFile.newFileName))
-                    val bufferList = DataBufferUtils.read(inputStream, DefaultDataBufferFactory(false, 4096), 4096)
+                    val bufferFlux = Flux.using({
+                        return@using fs.open(Path(fileDirectoryPath, storedFile.newFileName))
+                    }, {
+                        return@using DataBufferUtils.read(it, DefaultDataBufferFactory(false, 4096), 4096)
+                    }, {
+                        inputStream -> inputStream.close()
+                    })
 
-                    return@flatMap Mono.zip(ServerResponse.ok().body(bufferList), Mono.just(inputStream))
+                    return@flatMap ServerResponse.ok().body(bufferFlux)
                 }
-                .map { it.t1 }
                 .onErrorResume { error ->
                     logger.error("Unhandled exception", error)
 
