@@ -6,6 +6,7 @@ import org.portfolio.fileserver.repository.FilesRepository
 import org.slf4j.LoggerFactory
 import org.springframework.core.io.buffer.DataBufferUtils
 import org.springframework.core.io.buffer.DefaultDataBufferFactory
+import org.springframework.http.HttpStatus
 import org.springframework.web.reactive.function.server.ServerRequest
 import org.springframework.web.reactive.function.server.ServerResponse
 import org.springframework.web.reactive.function.server.body
@@ -25,6 +26,12 @@ class DownloadFileHandler(private val fs: FileSystem,
                     val bufferList = DataBufferUtils.read(inputStream, DefaultDataBufferFactory(false, 4096), 4096)
 
                     return@flatMap ServerResponse.ok().body(bufferList)
+                }
+                .onErrorResume { error ->
+                    logger.error("Unhandled exception", error)
+
+                    return@onErrorResume ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(Mono.just("Something went wrong"))
                 }
     }
 }
