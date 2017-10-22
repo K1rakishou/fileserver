@@ -1,7 +1,11 @@
 package org.portfolio.fileserver.handlers
 
 import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
 import org.portfolio.fileserver.repository.FilesRepository
+import org.slf4j.LoggerFactory
+import org.springframework.core.io.buffer.DataBufferUtils
+import org.springframework.core.io.buffer.DefaultDataBufferFactory
 import org.springframework.web.reactive.function.server.ServerRequest
 import org.springframework.web.reactive.function.server.ServerResponse
 import org.springframework.web.reactive.function.server.body
@@ -10,7 +14,17 @@ import reactor.core.publisher.Mono
 class DownloadFileHandler(private val fs: FileSystem,
                           private val repo: FilesRepository) {
 
+    private val logger = LoggerFactory.getLogger(DownloadFileHandler::class.java)
+    private var fileDirectoryPath = Path(fs.homeDirectory, "files")
+
     fun handleFileDownload(request: ServerRequest): Mono<ServerResponse> {
-        return ServerResponse.ok().body(Mono.just("123"))
+        return Mono.just(request.pathVariable("file_name"))
+                .flatMap { fileName -> repo.findById(fileName) }
+                .flatMap { storedFile ->
+                    val inputStream = fs.open(Path(fileDirectoryPath, storedFile.newFileName))
+                    val bufferList = DataBufferUtils.read(inputStream, DefaultDataBufferFactory(false, 4096), 4096)
+
+                    return@flatMap ServerResponse.ok().body(bufferList)
+                }
     }
 }

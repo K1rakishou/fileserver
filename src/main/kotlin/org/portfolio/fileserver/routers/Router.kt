@@ -16,7 +16,7 @@ class Router(private val uploadFileHandler: UploadFileHandler,
                 }
 
                 accept(MediaType.APPLICATION_JSON).nest {
-                    GET("/download", downloadFileHandler::handleFileDownload)
+                    GET("/download/{file_name}", downloadFileHandler::handleFileDownload)
                 }
             }
         }
