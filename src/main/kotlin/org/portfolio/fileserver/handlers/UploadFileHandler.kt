@@ -66,12 +66,14 @@ class UploadFileHandler(private val fs: FileSystem,
         val newFileName = "$generatedName.$extension"
         val fullPath = Path(fileDirectoryPath, newFileName)
 
+        //use "use" function so we don't forget to close the streams
         fs.create(fullPath).use { outputStream ->
             for (data in partsList) {
                 data.asInputStream().use { inputStream ->
                     val chunkSize = inputStream.available()
                     val buffer = ByteArray(chunkSize)
 
+                    //copy chunks from one stream to another
                     inputStream.read(buffer, 0, chunkSize)
                     outputStream.wrappedStream.write(buffer, 0, chunkSize)
                 }
