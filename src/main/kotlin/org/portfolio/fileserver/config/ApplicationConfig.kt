@@ -4,6 +4,7 @@ import com.mongodb.ConnectionString
 import com.samskivert.mustache.Mustache
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
+import org.portfolio.fileserver.handlers.DownloadFileHandler
 import org.portfolio.fileserver.handlers.UploadFileHandler
 import org.portfolio.fileserver.repository.FilesRepository
 import org.portfolio.fileserver.routers.Router
@@ -20,6 +21,7 @@ import org.springframework.web.reactive.function.server.RouterFunctions
 fun myBeans() = beans {
     bean<Router>()
     bean<UploadFileHandler>()
+    bean<DownloadFileHandler>()
     bean<GeneratorService>()
     bean {
         FilesRepository(ref())
