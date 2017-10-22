@@ -23,7 +23,7 @@ class UploadFileHandler(private val fs: FileSystem,
                         private val repo: FilesRepository,
                         private val generator: GeneratorService) {
 
-    private val maxFileSize = 5368709120L
+    private val maxFileSize = 5242880L //5MB
     private val logger = LoggerFactory.getLogger(UploadFileHandler::class.java)
     private var fileDirectoryPath = Path(fs.homeDirectory, "files")
     private val uploadingFilePartName = "file"
@@ -88,7 +88,7 @@ class UploadFileHandler(private val fs: FileSystem,
                 .sum()
 
         if (fileSize > maxFileSize) {
-            throw MaxFilesSizeExceededException()
+            throw MaxFilesSizeExceededException(maxFileSize)
         }
     }
 
@@ -103,30 +103,31 @@ class UploadFileHandler(private val fs: FileSystem,
         logger.error("Unhandled exception", error)
 
         return when (error) {
-            is NoFileToUploadException -> ServerResponse.badRequest().body(Mono.just("No file to upload received"))
-            is IOException -> ServerResponse.unprocessableEntity().body(Mono.just("IOException while trying to store the file"))
-            is MaxFilesSizeExceededException -> ServerResponse.badRequest().body(Mono.just("File is too big"))
-            else -> ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Mono.just("Unknown error"))
+            is NoFileToUploadException -> {
+                val msg = error.message ?: "No file to upload received"
+                ServerResponse.badRequest().body(Mono.just(msg))
+            }
+            is IOException -> {
+                val msg = error.message ?: "IOException while trying to store the file"
+                ServerResponse.unprocessableEntity().body(Mono.just(msg))
+            }
+            is MaxFilesSizeExceededException -> {
+                val msg = error.message ?: "File is too big"
+                ServerResponse.badRequest().body(Mono.just(msg))
+            }
+            else -> {
+                val msg = error.message ?: "Unknown error"
+                ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Mono.just(msg))
+            }
         }
     }
 
     data class FileInfo(val newFileName: String,
                         val originalName: String)
 
-    class NoFileToUploadException : Exception()
-    class MaxFilesSizeExceededException : Exception()
+    class NoFileToUploadException : Exception("The request does not contain \"file\" part")
+    class MaxFilesSizeExceededException(maxfs: Long) : Exception("The size of the file exceeds ${maxfs / (1024 * 1024)} MB")
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 
