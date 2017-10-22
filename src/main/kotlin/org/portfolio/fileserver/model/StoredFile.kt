@@ -8,4 +8,15 @@ import org.springframework.data.mongodb.core.mapping.Document
 data class StoredFile(@Id
                       val newFileName: String,
                       val oldFileName: String,
-                      val uploadedOn: Long)
+                      val uploadedOn: Long) {
+
+    fun isEmpty(): Boolean {
+        return newFileName.isEmpty() || oldFileName.isEmpty() || uploadedOn == 0L
+    }
+
+    companion object {
+        fun empty(): StoredFile {
+            return StoredFile("", "", 0L)
+        }
+    }
+}

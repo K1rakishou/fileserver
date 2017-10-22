@@ -38,7 +38,7 @@ class UploadFileHandler(private val fs: FileSystem,
                 .flatMap(this::saveFileInfoToDb)
                 .map { it.t2 }
                 .flatMap { result -> ServerResponse.ok().body(Mono.just(result)) }
-                .onErrorResume(this::handleError)
+                .onErrorResume(this::handleErrors)
     }
 
     private fun checkRequestContainsFile(part: Part?): Pair<Part, String> {
@@ -101,23 +101,19 @@ class UploadFileHandler(private val fs: FileSystem,
         return Mono.zip(repoResult, Mono.just(fileInfo.newFileName))
     }
 
-    private fun handleError(error: Throwable): Mono<ServerResponse> {
-        logger.error("Unhandled exception", error)
-
+    private fun handleErrors(error: Throwable): Mono<ServerResponse> {
         return when (error) {
-            is NoFileToUploadException -> {
-                val msg = error.message ?: "No file to upload received"
-                ServerResponse.badRequest().body(Mono.just(msg))
-            }
+            is NoFileToUploadException -> ServerResponse.badRequest().body(Mono.just(error.message!!))
+            is MaxFilesSizeExceededException -> ServerResponse.badRequest().body(Mono.just(error.message!!))
+
             is IOException -> {
+                logger.error("Unhandled exception", error)
                 val msg = error.message ?: "IOException while trying to store the file"
                 ServerResponse.unprocessableEntity().body(Mono.just(msg))
             }
-            is MaxFilesSizeExceededException -> {
-                val msg = error.message ?: "File is too big"
-                ServerResponse.badRequest().body(Mono.just(msg))
-            }
+
             else -> {
+                logger.error("Unhandled exception", error)
                 val msg = error.message ?: "Unknown error"
                 ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Mono.just(msg))
             }

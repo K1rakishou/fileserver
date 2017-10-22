@@ -2,6 +2,7 @@ package org.portfolio.fileserver.handlers
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
+import org.portfolio.fileserver.model.StoredFile
 import org.portfolio.fileserver.repository.FilesRepository
 import org.slf4j.LoggerFactory
 import org.springframework.core.io.buffer.DataBufferUtils
@@ -21,23 +22,69 @@ class DownloadFileHandler(private val fs: FileSystem,
 
     fun handleFileDownload(request: ServerRequest): Mono<ServerResponse> {
         return Mono.just(request.pathVariable("file_name"))
-                .flatMap { fileName -> repo.findById(fileName) }
-                .flatMap { storedFile ->
-                    val bufferFlux = Flux.using({
-                        return@using fs.open(Path(fileDirectoryPath, storedFile.newFileName))
-                    }, {
-                        return@using DataBufferUtils.read(it, DefaultDataBufferFactory(false, 4096), 4096)
-                    }, {
-                        inputStream -> inputStream.close()
-                    })
-
-                    return@flatMap ServerResponse.ok().body(bufferFlux)
-                }
-                .onErrorResume { error ->
-                    logger.error("Unhandled exception", error)
-
-                    return@onErrorResume ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                            .body(Mono.just("Something went wrong"))
-                }
+                .flatMap { fileName -> repo.findById(fileName).switchIfEmpty(Mono.just(StoredFile.empty())) }
+                .doOnSuccess(this::checkFileFound)
+                .flatMap(this::serveFile)
+                .onErrorResume(this::handleErrors)
     }
+
+    private fun checkFileFound(storedFile: StoredFile) {
+        if (storedFile.isEmpty()) {
+            throw CouldNotFindFile()
+        }
+    }
+
+    private fun serveFile(storedFile: StoredFile): Mono<ServerResponse> {
+        val bufferFlux = Flux.using({
+            return@using fs.open(Path(fileDirectoryPath, storedFile.newFileName))
+        }, { inputStream ->
+            return@using DataBufferUtils.read(inputStream, DefaultDataBufferFactory(false, 4096), 4096)
+        }, { inputStream ->
+            inputStream.close()
+        })
+
+        return ServerResponse.ok().body(bufferFlux)
+    }
+
+    private fun handleErrors(error: Throwable): Mono<ServerResponse> {
+        return when (error) {
+            is CouldNotFindFile -> {
+                ServerResponse.status(HttpStatus.NOT_FOUND).body(Mono.just(error.message!!))
+            }
+
+            else -> {
+                logger.error("Unhandled exception", error)
+                val msg = error.message ?: "Unknown error"
+                ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Mono.just(msg))
+            }
+        }
+    }
+
+    class CouldNotFindFile : Exception("Could not find the file")
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
