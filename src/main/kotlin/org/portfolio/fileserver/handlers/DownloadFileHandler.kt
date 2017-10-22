@@ -22,7 +22,7 @@ class DownloadFileHandler(private val fs: FileSystem,
         return Mono.just(request.pathVariable("file_name"))
                 .flatMap { fileName -> repo.findById(fileName) }
                 .flatMap { storedFile ->
-                    //FIXME: we need to somehow close the inputs stream after we've read everything, dunno how to do that atm
+                    //FIXME: we need to somehow close the input stream after we are done reading, dunno how to do that atm
                     val inputStream = fs.open(Path(fileDirectoryPath, storedFile.newFileName))
                     val bufferList = DataBufferUtils.read(inputStream, DefaultDataBufferFactory(false, 4096), 4096)
 
