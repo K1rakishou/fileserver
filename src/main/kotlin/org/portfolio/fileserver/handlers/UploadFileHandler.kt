@@ -8,6 +8,7 @@ import org.portfolio.fileserver.repository.FilesRepository
 import org.portfolio.fileserver.service.GeneratorService
 import org.slf4j.LoggerFactory
 import org.springframework.core.io.buffer.DataBuffer
+import org.springframework.http.HttpStatus
 import org.springframework.http.codec.multipart.FilePart
 import org.springframework.http.codec.multipart.Part
 import org.springframework.web.reactive.function.BodyExtractors
@@ -18,32 +19,35 @@ import reactor.core.publisher.Mono
 import reactor.util.function.Tuple2
 import java.io.IOException
 
-class ApiHandler(private val fs: FileSystem,
-                 private val repo: FilesRepository,
-                 private val generator: GeneratorService) {
+class UploadFileHandler(private val fs: FileSystem,
+                        private val repo: FilesRepository,
+                        private val generator: GeneratorService) {
 
-    private val logger = LoggerFactory.getLogger(ApiHandler::class.java)
-    private var fileDirectoryPath: Path
+    private val maxFileSize = 5368709120L
+    private val logger = LoggerFactory.getLogger(UploadFileHandler::class.java)
+    private var fileDirectoryPath = Path(fs.homeDirectory, "files")
     private val uploadingFilePartName = "file"
-
-    init {
-        fileDirectoryPath = Path(fs.homeDirectory, "files")
-    }
 
     fun handleFileUpload(request: ServerRequest): Mono<ServerResponse> {
         return request.body(BodyExtractors.toMultipartData())
                 .map { mvm -> mvm.getFirst(uploadingFilePartName) }
                 .map(this::checkRequestContainsFile)
                 .flatMap(this::waitForRemainingParts)
+                .doOnNext(this::checkFileSize)
                 .flatMap(this::writeToStorage)
                 .flatMap(this::saveFileInfoToDb)
-                .flatMap { ServerResponse.ok().body(Mono.just("ok")) }
+                .map { it.t2 }
+                .flatMap { result -> ServerResponse.ok().body(Mono.just(result)) }
                 .onErrorResume(this::handleError)
     }
 
-    private fun saveFileInfoToDb(fileInfo: FileInfo): Mono<StoredFile> {
-        return repo.save(StoredFile(fileInfo.newFileName,
-                fileInfo.originalName, System.currentTimeMillis()))
+    private fun checkRequestContainsFile(part: Part?): Pair<Part, String> {
+        if (part == null) {
+            throw NoFileToUploadException()
+        }
+
+        val originalName = (part as FilePart).filename()
+        return part to originalName
     }
 
     private fun waitForRemainingParts(it: Pair<Part, String>): Mono<Tuple2<MutableList<DataBuffer>, String>>? {
@@ -77,27 +81,40 @@ class ApiHandler(private val fs: FileSystem,
         return Mono.just(FileInfo(newFileName, originalName))
     }
 
-    private fun checkRequestContainsFile(part: Part?): Pair<Part, String> {
-        if (part == null) {
-            throw NullPointerException()
-        }
+    private fun checkFileSize(it: Tuple2<MutableList<DataBuffer>, String>) {
+        val dataBufferList = it.t1
+        val fileSize: Long = dataBufferList
+                .map { it.readableByteCount().toLong() }
+                .sum()
 
-        val originalName = (part as FilePart).filename()
-        return part to originalName
+        if (fileSize > maxFileSize) {
+            throw MaxFilesSizeExceededException()
+        }
+    }
+
+    private fun saveFileInfoToDb(fileInfo: FileInfo): Mono<Tuple2<StoredFile, String>> {
+        val repoResult = repo.save(StoredFile(fileInfo.newFileName,
+                fileInfo.originalName, System.currentTimeMillis()))
+
+        return Mono.zip(repoResult, Mono.just(fileInfo.newFileName))
     }
 
     private fun handleError(error: Throwable): Mono<ServerResponse> {
         logger.error("Unhandled exception", error)
 
         return when (error) {
-            is NullPointerException -> ServerResponse.badRequest().body(Mono.just("No file to upload received"))
+            is NoFileToUploadException -> ServerResponse.badRequest().body(Mono.just("No file to upload received"))
             is IOException -> ServerResponse.unprocessableEntity().body(Mono.just("IOException while trying to store the file"))
-            else -> throw error
+            is MaxFilesSizeExceededException -> ServerResponse.badRequest().body(Mono.just("File is too big"))
+            else -> ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Mono.just("Unknown error"))
         }
     }
 
     data class FileInfo(val newFileName: String,
                         val originalName: String)
+
+    class NoFileToUploadException : Exception()
+    class MaxFilesSizeExceededException : Exception()
 }
 
 

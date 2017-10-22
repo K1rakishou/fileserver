@@ -4,7 +4,7 @@ import com.mongodb.ConnectionString
 import com.samskivert.mustache.Mustache
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
-import org.portfolio.fileserver.handlers.ApiHandler
+import org.portfolio.fileserver.handlers.UploadFileHandler
 import org.portfolio.fileserver.repository.FilesRepository
 import org.portfolio.fileserver.routers.Router
 import org.portfolio.fileserver.service.GeneratorService
@@ -19,7 +19,7 @@ import org.springframework.web.reactive.function.server.RouterFunctions
 
 fun myBeans() = beans {
     bean<Router>()
-    bean<ApiHandler>()
+    bean<UploadFileHandler>()
     bean<GeneratorService>()
     bean {
         FilesRepository(ref())
@@ -30,7 +30,7 @@ fun myBeans() = beans {
     bean {
         ReactiveMongoTemplate(
                 SimpleReactiveMongoDatabaseFactory(
-                        ConnectionString("mongodb://192.168.99.100:27017/test")
+                        ConnectionString("mongodb://192.168.99.100:27017/fileserver")
                 )
         )
     }

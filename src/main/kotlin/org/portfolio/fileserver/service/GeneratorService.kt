@@ -21,6 +21,6 @@ class GeneratorService {
     }
 
     fun generateNewFileName(): String {
-        return generateRandomString(100, numericAlphabetic)
+        return generateRandomString(64, numericAlphabetic)
     }
 }

@@ -8,7 +8,7 @@ import org.springframework.web.server.adapter.WebHttpHandlerBuilder
 import reactor.ipc.netty.http.server.HttpServer
 import reactor.ipc.netty.tcp.BlockingNettyContext
 
-class FileServerApplication(port: Int = 8080) {
+class FileServerApplication(port: Int = 8081) {
     private val httpHandler: HttpHandler
     private val server: HttpServer
     private lateinit var nettyContext: BlockingNettyContext
