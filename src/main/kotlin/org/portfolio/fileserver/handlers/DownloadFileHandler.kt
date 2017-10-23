@@ -18,15 +18,19 @@ class DownloadFileHandler(private val fs: FileSystem,
                           private val repo: FilesRepository) {
 
     private val logger = LoggerFactory.getLogger(DownloadFileHandler::class.java)
+    private val fileNamePathVariable = "file_name"
     private var fileDirectoryPath = Path(fs.homeDirectory, "files")
 
     fun handleFileDownload(request: ServerRequest): Mono<ServerResponse> {
-        return Mono.just(request.pathVariable("file_name"))
-                .flatMap { fileName -> repo.findById(fileName).switchIfEmpty(Mono.just(StoredFile.empty())) }
+        return Mono.just(request.pathVariable(fileNamePathVariable))
+                .flatMap(this::fetchFileInfoFromRepo)
                 .doOnSuccess(this::checkFileFound)
                 .flatMap(this::serveFile)
                 .onErrorResume(this::handleErrors)
     }
+
+    private fun fetchFileInfoFromRepo(fileName: String) =
+            repo.findById(fileName).switchIfEmpty(Mono.just(StoredFile.empty()))
 
     private fun checkFileFound(storedFile: StoredFile) {
         if (storedFile.isEmpty()) {

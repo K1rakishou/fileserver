@@ -8,7 +8,7 @@ import org.portfolio.fileserver.handlers.DownloadFileHandler
 import org.portfolio.fileserver.handlers.UploadFileHandler
 import org.portfolio.fileserver.repository.FilesRepository
 import org.portfolio.fileserver.routers.Router
-import org.portfolio.fileserver.service.GeneratorService
+import org.portfolio.fileserver.service.GeneratorServiceImpl
 import org.springframework.boot.autoconfigure.mustache.MustacheResourceTemplateLoader
 import org.springframework.boot.web.reactive.result.view.MustacheViewResolver
 import org.springframework.context.support.beans
@@ -22,7 +22,7 @@ fun myBeans() = beans {
     bean<Router>()
     bean<UploadFileHandler>()
     bean<DownloadFileHandler>()
-    bean<GeneratorService>()
+    bean<GeneratorServiceImpl>()
     bean {
         FilesRepository(ref())
     }

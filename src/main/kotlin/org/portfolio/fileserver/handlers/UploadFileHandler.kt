@@ -35,7 +35,7 @@ class UploadFileHandler(private val fs: FileSystem,
                 .flatMap(this::waitForRemainingParts)
                 .doOnNext(this::checkFileSize)
                 .flatMap(this::writeToStorage)
-                .flatMap(this::saveFileInfoToDb)
+                .flatMap(this::saveFileInfoToRepo)
                 .map { it.t2 }
                 .flatMap { result -> ServerResponse.ok().body(Mono.just(result)) }
                 .onErrorResume(this::handleErrors)
@@ -63,7 +63,13 @@ class UploadFileHandler(private val fs: FileSystem,
         val originalName = it.t2
         val extension = originalName.extractExtension()
         val generatedName = generator.generateNewFileName()
-        val newFileName = "$generatedName.$extension"
+
+        val newFileName = if (extension.isEmpty()) {
+            generatedName
+        } else {
+            "$generatedName.$extension"
+        }
+
         val fullPath = Path(fileDirectoryPath, newFileName)
 
         //use "use" function so we don't forget to close the streams
@@ -94,7 +100,7 @@ class UploadFileHandler(private val fs: FileSystem,
         }
     }
 
-    private fun saveFileInfoToDb(fileInfo: FileInfo): Mono<Tuple2<StoredFile, String>> {
+    private fun saveFileInfoToRepo(fileInfo: FileInfo): Mono<Tuple2<StoredFile, String>> {
         val repoResult = repo.save(StoredFile(fileInfo.newFileName,
                 fileInfo.originalName, System.currentTimeMillis()))
 
