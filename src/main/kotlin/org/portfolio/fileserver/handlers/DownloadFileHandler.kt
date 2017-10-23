@@ -50,7 +50,7 @@ class DownloadFileHandler(private val fs: FileSystem,
         })
 
         return ServerResponse.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=${storedFile.oldFileName}")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=${storedFile.oldFileName}")
                 .body(bufferFlux)
     }
 
