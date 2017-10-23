@@ -11,6 +11,7 @@ import org.springframework.core.io.buffer.DataBuffer
 import org.springframework.http.HttpStatus
 import org.springframework.http.codec.multipart.FilePart
 import org.springframework.http.codec.multipart.Part
+import org.springframework.util.MultiValueMap
 import org.springframework.web.reactive.function.BodyExtractors
 import org.springframework.web.reactive.function.server.ServerRequest
 import org.springframework.web.reactive.function.server.ServerResponse
@@ -30,8 +31,7 @@ class UploadFileHandler(private val fs: FileSystem,
 
     fun handleFileUpload(request: ServerRequest): Mono<ServerResponse> {
         return request.body(BodyExtractors.toMultipartData())
-                .map { mvm -> mvm.getFirst(uploadingFilePartName) }
-                .map(this::checkRequestContainsFile)
+                .map(this::checkFileToUploadExists)
                 .flatMap(this::waitForRemainingParts)
                 .doOnNext(this::checkFileSize)
                 .flatMap(this::writeToStorage)
@@ -41,12 +41,16 @@ class UploadFileHandler(private val fs: FileSystem,
                 .onErrorResume(this::handleErrors)
     }
 
-    private fun checkRequestContainsFile(part: Part?): Pair<Part, String> {
-        if (part == null) {
-            throw NoFileToUploadException()
+    private fun checkFileToUploadExists(mvm: MultiValueMap<String, Part>): Pair<Part, String> {
+        val part = mvm.getFirst(uploadingFilePartName)
+                ?: throw NoFileToUploadException()
+
+        val originalName = if (part is FilePart) {
+            part.filename()
+        } else {
+            ""
         }
 
-        val originalName = (part as FilePart).filename()
         return part to originalName
     }
 
@@ -60,9 +64,15 @@ class UploadFileHandler(private val fs: FileSystem,
 
     private fun writeToStorage(it: Tuple2<MutableList<DataBuffer>, String>): Mono<FileInfo> {
         val partsList = it.t1
-        val originalName = it.t2
-        val extension = originalName.extractExtension()
         val generatedName = generator.generateNewFileName()
+
+        val originalName = if (it.t2.isNotEmpty()) {
+            it.t2
+        } else {
+            generatedName
+        }
+
+        val extension = originalName.extractExtension()
 
         val newFileName = if (extension.isEmpty()) {
             generatedName
@@ -96,7 +106,7 @@ class UploadFileHandler(private val fs: FileSystem,
                 .sum()
 
         if (fileSize > maxFileSize) {
-            throw MaxFilesSizeExceededException(maxFileSize)
+            throw MaxFilesSizeExceededException(fileSize, maxFileSize)
         }
     }
 
@@ -130,7 +140,8 @@ class UploadFileHandler(private val fs: FileSystem,
                         val originalName: String)
 
     class NoFileToUploadException : Exception("The request does not contain \"file\" part")
-    class MaxFilesSizeExceededException(maxfs: Long) : Exception("The size of the file exceeds ${maxfs / (1024 * 1024)} MB")
+    class MaxFilesSizeExceededException(fileSize: Long, maxfs: Long) : Exception("The size of the file " +
+            "(${fileSize.toFloat() / (1024 * 1024)} MB) exceeds the limit (${maxfs.toFloat() / (1024 * 1024)} MB)")
 }
 
 

@@ -7,6 +7,7 @@ import org.portfolio.fileserver.repository.FilesRepository
 import org.slf4j.LoggerFactory
 import org.springframework.core.io.buffer.DataBufferUtils
 import org.springframework.core.io.buffer.DefaultDataBufferFactory
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.web.reactive.function.server.ServerRequest
 import org.springframework.web.reactive.function.server.ServerResponse
@@ -47,7 +48,9 @@ class DownloadFileHandler(private val fs: FileSystem,
             inputStream.close()
         })
 
-        return ServerResponse.ok().body(bufferFlux)
+        return ServerResponse.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=${storedFile.oldFileName}")
+                .body(bufferFlux)
     }
 
     private fun handleErrors(error: Throwable): Mono<ServerResponse> {

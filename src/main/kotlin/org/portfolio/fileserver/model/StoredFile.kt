@@ -1,10 +1,11 @@
 package org.portfolio.fileserver.model
 
+import org.portfolio.fileserver.repository.FilesRepository
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document
 
 
-@Document(collection = "files")
+@Document(collection = FilesRepository.COLLECTION_NAME)
 data class StoredFile(@Id
                       val newFileName: String,
                       val oldFileName: String,
