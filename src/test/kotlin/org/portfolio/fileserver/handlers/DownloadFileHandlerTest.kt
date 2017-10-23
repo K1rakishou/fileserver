@@ -9,7 +9,6 @@ import org.junit.runner.RunWith
 import org.portfolio.fileserver.config.DB_SERVER_ADDRESS
 import org.portfolio.fileserver.repository.FilesRepository
 import org.portfolio.fileserver.service.GeneratorServiceImpl
-import org.springframework.core.io.ByteArrayResource
 import org.springframework.core.io.ClassPathResource
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate
 import org.springframework.data.mongodb.core.SimpleReactiveMongoDatabaseFactory
@@ -22,11 +21,9 @@ import org.springframework.util.LinkedMultiValueMap
 import org.springframework.util.MultiValueMap
 import org.springframework.web.reactive.function.BodyInserters
 import org.springframework.web.reactive.function.server.router
-import reactor.test.StepVerifier
 
 @RunWith(SpringRunner::class)
-class UploadFileHandlerTest {
-
+class DownloadFileHandlerTest {
     val fs = FileSystem.newInstance(Configuration())
     val template = ReactiveMongoTemplate(SimpleReactiveMongoDatabaseFactory(
             ConnectionString("mongodb://$DB_SERVER_ADDRESS/fileserver")))
@@ -36,11 +33,15 @@ class UploadFileHandlerTest {
     private var fileDirectoryPath = Path(fs.homeDirectory, "files")
 
     private fun getWebTestClient(): WebTestClient {
+        val downloadFileHandler = DownloadFileHandler(fs, repo)
         val uploadFileHandler = UploadFileHandler(fs, repo, generator)
 
         return WebTestClient.bindToRouterFunction(router {
             "/v1".nest {
                 "/api".nest {
+                    accept(MediaType.APPLICATION_JSON).nest {
+                        GET("/download/{file_name}", downloadFileHandler::handleFileDownload)
+                    }
                     accept(MediaType.MULTIPART_FORM_DATA).nest {
                         POST("/upload", uploadFileHandler::handleFileUpload)
                     }
@@ -60,26 +61,8 @@ class UploadFileHandlerTest {
         return parts
     }
 
-    fun createVeryBigMultipartFile(): MultiValueMap<String, Any> {
-        val bytes = ByteArray(10242880)
-        for (i in 0 until bytes.size) {
-            bytes[i] = 55
-        }
-
-        val resource = ByteArrayResource(bytes)
-
-        val parts = LinkedMultiValueMap<String, Any>()
-        parts.add("file", resource)
-
-        return parts
-    }
-
-    fun createEmptyMultipartFile(): MultiValueMap<String, Any> {
-        return LinkedMultiValueMap<String, Any>()
-    }
-
     @Test
-    fun `test upload when everything is ok`() {
+    fun `test download when everything is ok`() {
         val webClient = getWebTestClient()
         val file = createMultipartFile()
 
@@ -92,50 +75,42 @@ class UploadFileHandlerTest {
                 .expectStatus().is2xxSuccessful
                 .expectBody(String::class.java).returnResult().responseBody!!
 
-        StepVerifier.create(repo.findById(result))
-                .assertNext { storedFile ->
-                    assert(result == storedFile.newFileName)
-                }
-                .verifyComplete()
+        val fileBody = webClient
+                .get()
+                .uri("v1/api/download/$result")
+                .exchange()
+                .expectStatus().is2xxSuccessful
+                .expectBody(String::class.java).returnResult().responseBody!!
 
         fs.delete(Path(fileDirectoryPath, result), false)
         repo.clear().block()
+
+        assert(fileBody.startsWith("Lorem ipsum dolor"))
     }
 
     @Test
-    fun `test upload when no file was sent to upload`() {
+    fun `test download when file name does not exist in the DB`() {
         val webClient = getWebTestClient()
-        val file = createEmptyMultipartFile()
 
-        val errorMessage = webClient
-                .post()
-                .uri("v1/api/upload")
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .body(BodyInserters.fromMultipartData(file))
+        val result = webClient
+                .get()
+                .uri("v1/api/download/123.txt")
                 .exchange()
-                .expectStatus().isBadRequest
+                .expectStatus().isNotFound
                 .expectBody(String::class.java).returnResult().responseBody!!
 
-        assert("The request does not contain \"file\" part" == errorMessage)
-    }
-
-    @Test
-    fun `test upload when file size is exceeding the limit`() {
-        val webClient = getWebTestClient()
-        val file = createVeryBigMultipartFile()
-
-        val errorMessage = webClient
-                .post()
-                .uri("v1/api/upload")
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .body(BodyInserters.fromMultipartData(file))
-                .exchange()
-                .expectStatus().isBadRequest
-                .expectBody(String::class.java).returnResult().responseBody!!
-
-        println(errorMessage)
+        assert("Could not find the file" == result)
     }
 }
+
+
+
+
+
+
+
+
+
 
 
 

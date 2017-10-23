@@ -18,6 +18,8 @@ import org.springframework.data.mongodb.repository.support.ReactiveMongoReposito
 import org.springframework.web.reactive.function.server.HandlerStrategies
 import org.springframework.web.reactive.function.server.RouterFunctions
 
+const val DB_SERVER_ADDRESS = "192.168.99.100:27017"
+
 fun myBeans() = beans {
     bean<Router>()
     bean<UploadFileHandler>()
@@ -32,7 +34,7 @@ fun myBeans() = beans {
     bean {
         ReactiveMongoTemplate(
                 SimpleReactiveMongoDatabaseFactory(
-                        ConnectionString("mongodb://192.168.99.100:27017/fileserver")
+                        ConnectionString("mongodb://$DB_SERVER_ADDRESS/fileserver")
                 )
         )
     }

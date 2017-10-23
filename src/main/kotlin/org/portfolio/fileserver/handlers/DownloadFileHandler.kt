@@ -30,8 +30,9 @@ class DownloadFileHandler(private val fs: FileSystem,
                 .onErrorResume(this::handleErrors)
     }
 
-    private fun fetchFileInfoFromRepo(fileName: String) =
-            repo.findById(fileName).switchIfEmpty(Mono.just(StoredFile.empty()))
+    private fun fetchFileInfoFromRepo(fileName: String): Mono<StoredFile> {
+        return repo.findById(fileName).switchIfEmpty(Mono.just(StoredFile.empty()))
+    }
 
     private fun checkFileFound(storedFile: StoredFile) {
         if (storedFile.isEmpty()) {
