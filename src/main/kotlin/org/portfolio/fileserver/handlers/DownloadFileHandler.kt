@@ -31,12 +31,13 @@ class DownloadFileHandler(private val fs: FileSystem,
     }
 
     private fun fetchFileInfoFromRepo(fileName: String): Mono<StoredFile> {
-        return repo.findById(fileName).switchIfEmpty(Mono.just(StoredFile.empty()))
+        return repo.findById(fileName)
+                .switchIfEmpty(Mono.just(StoredFile.empty()))
     }
 
     private fun checkFileFound(storedFile: StoredFile) {
         if (storedFile.isEmpty()) {
-            throw CouldNotFindFile()
+            throw CouldNotFindFileException()
         }
     }
 
@@ -56,7 +57,7 @@ class DownloadFileHandler(private val fs: FileSystem,
 
     private fun handleErrors(error: Throwable): Mono<ServerResponse> {
         return when (error) {
-            is CouldNotFindFile -> {
+            is CouldNotFindFileException -> {
                 ServerResponse.status(HttpStatus.NOT_FOUND).body(Mono.just(error.message!!))
             }
 
@@ -68,7 +69,7 @@ class DownloadFileHandler(private val fs: FileSystem,
         }
     }
 
-    class CouldNotFindFile : Exception("Could not find the file")
+    class CouldNotFindFileException : Exception("Could not find the file")
 }
 
 

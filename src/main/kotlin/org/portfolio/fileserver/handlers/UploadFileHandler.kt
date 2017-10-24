@@ -33,7 +33,7 @@ class UploadFileHandler(private val fs: FileSystem,
         return request.body(BodyExtractors.toMultipartData())
                 .map(this::checkFileToUploadExists)
                 .flatMap(this::waitForRemainingParts)
-                .doOnNext(this::checkFileSize)
+                .doOnSuccess(this::checkFileSize)
                 .flatMap(this::writeToStorage)
                 .flatMap(this::saveFileInfoToRepo)
                 .map { it.t2 }
@@ -45,6 +45,7 @@ class UploadFileHandler(private val fs: FileSystem,
         val part = mvm.getFirst(uploadingFilePartName)
                 ?: throw NoFileToUploadException()
 
+        //for test purpose
         val originalName = if (part is FilePart) {
             part.filename()
         } else {
@@ -58,22 +59,28 @@ class UploadFileHandler(private val fs: FileSystem,
         val part = it.first
         val originalName = it.second
 
-        val partsListMono = part.content().buffer().single()
+        val partsListMono = part.content()
+                .buffer()
+                .single()
+
         return Mono.zip(partsListMono, Mono.just(originalName))
     }
 
     private fun writeToStorage(it: Tuple2<MutableList<DataBuffer>, String>): Mono<FileInfo> {
         val partsList = it.t1
+        val origName = it.t2
         val generatedName = generator.generateNewFileName()
 
-        val originalName = if (it.t2.isNotEmpty()) {
-            it.t2
+        //if file does not have name (what?) then give it a name
+        val originalName = if (origName.isNotEmpty()) {
+            origName
         } else {
             generatedName
         }
 
         val extension = originalName.extractExtension()
 
+        //if file does not have an extension then just don't use it
         val newFileName = if (extension.isEmpty()) {
             generatedName
         } else {
