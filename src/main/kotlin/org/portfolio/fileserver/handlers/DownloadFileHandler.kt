@@ -21,6 +21,7 @@ class DownloadFileHandler(private val fs: FileSystem,
                           private val repo: FilesRepository) {
 
     private val logger = LoggerFactory.getLogger(DownloadFileHandler::class.java)
+    private val readChuckSize = 16384
     private val fileNamePathVariable = "file_name"
     private var fileDirectoryPath = Path(fs.homeDirectory, "files")
 
@@ -47,7 +48,7 @@ class DownloadFileHandler(private val fs: FileSystem,
         val bufferFlux = Flux.using({
             return@using fs.open(Path(fileDirectoryPath, storedFile.newFileName))
         }, { inputStream ->
-            return@using DataBufferUtils.read(inputStream, DefaultDataBufferFactory(false, 4096), 4096)
+            return@using DataBufferUtils.read(inputStream, DefaultDataBufferFactory(false, readChuckSize), readChuckSize)
         }, { inputStream ->
             inputStream.close()
         })
