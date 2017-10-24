@@ -73,7 +73,7 @@ class UploadFileHandler(private val fs: FileSystem,
         val origName = it.t2
         val generatedName = generator.generateNewFileName()
 
-        //if file does not have name (what?) then give it a name
+        //if the file does not have a name (what?) then give it a name
         val originalName = if (origName.isNotEmpty()) {
             origName
         } else {
@@ -82,7 +82,7 @@ class UploadFileHandler(private val fs: FileSystem,
 
         val extension = originalName.extractExtension()
 
-        //if file does not have an extension then just don't use it
+        //if the file does not have an extension then just don't use it
         val newFileName = if (extension.isEmpty()) {
             generatedName
         } else {
@@ -158,9 +158,28 @@ class UploadFileHandler(private val fs: FileSystem,
                         val originalName: String)
 
     class NoFileToUploadException : Exception("The request does not contain \"file\" part")
-    class MaxFilesSizeExceededException(fileSize: Long, maxfs: Long) : Exception("The size of the file " +
-            "(${fileSize.toFloat() / (1024 * 1024)} MB) exceeds the limit (${maxfs.toFloat() / (1024 * 1024)} MB)")
+    class MaxFilesSizeExceededException(fileSize: Long, maxSize: Long) : Exception("The size of the file " +
+            "(${fileSize.toFloat() / (1024 * 1024)} MB) exceeds the limit (${maxSize.toFloat() / (1024 * 1024)} MB)")
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

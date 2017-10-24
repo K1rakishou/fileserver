@@ -3,7 +3,7 @@ package org.portfolio.fileserver.model.response
 import com.fasterxml.jackson.annotation.JsonProperty
 
 open class BaseServerResponse(@JsonProperty("code")
-                                  val code: Int,
+                              val code: Int,
 
-                                  @JsonProperty("message")
-                                  val message: String?)
+                              @JsonProperty("message")
+                              val message: String?)
