@@ -3,7 +3,9 @@ package org.portfolio.fileserver.handlers
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 import org.portfolio.fileserver.extensions.extractExtension
+import org.portfolio.fileserver.model.ServerResponseCode
 import org.portfolio.fileserver.model.StoredFile
+import org.portfolio.fileserver.model.response.UploadFileHandlerResponse
 import org.portfolio.fileserver.repository.FilesRepository
 import org.portfolio.fileserver.service.GeneratorService
 import org.slf4j.LoggerFactory
@@ -37,7 +39,7 @@ class UploadFileHandler(private val fs: FileSystem,
                 .flatMap(this::writeToStorage)
                 .flatMap(this::saveFileInfoToRepo)
                 .map { it.t2 }
-                .flatMap { result -> ServerResponse.ok().body(Mono.just(result)) }
+                .flatMap(this::sendResponse)
                 .onErrorResume(this::handleErrors)
     }
 
@@ -124,21 +126,30 @@ class UploadFileHandler(private val fs: FileSystem,
         return Mono.zip(repoResult, Mono.just(fileInfo.newFileName))
     }
 
+    private fun sendResponse(uploadedFileName: String): Mono<ServerResponse> {
+        return ServerResponse.ok()
+                .body(Mono.just(UploadFileHandlerResponse.success(uploadedFileName, ServerResponseCode.OK.value)))
+    }
+
     private fun handleErrors(error: Throwable): Mono<ServerResponse> {
         return when (error) {
-            is NoFileToUploadException -> ServerResponse.badRequest().body(Mono.just(error.message!!))
-            is MaxFilesSizeExceededException -> ServerResponse.badRequest().body(Mono.just(error.message!!))
+            is NoFileToUploadException -> ServerResponse.badRequest()
+                    .body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.NO_FILE_TO_UPLOAD.value, error.message!!)))
+            is MaxFilesSizeExceededException -> ServerResponse.badRequest()
+                    .body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.MAX_FILE_SIZE_EXCEEDED.value, error.message!!)))
 
             is IOException -> {
                 logger.error("Unhandled exception", error)
                 val msg = error.message ?: "IOException while trying to store the file"
-                ServerResponse.unprocessableEntity().body(Mono.just(msg))
+                ServerResponse.unprocessableEntity().
+                        body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.UNKNOWN_ERROR.value, msg)))
             }
 
             else -> {
                 logger.error("Unhandled exception", error)
                 val msg = error.message ?: "Unknown error"
-                ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Mono.just(msg))
+                ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.UNKNOWN_ERROR.value, msg)))
             }
         }
     }

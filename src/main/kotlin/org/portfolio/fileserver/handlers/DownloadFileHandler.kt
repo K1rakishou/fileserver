@@ -2,7 +2,9 @@ package org.portfolio.fileserver.handlers
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
+import org.portfolio.fileserver.model.ServerResponseCode
 import org.portfolio.fileserver.model.StoredFile
+import org.portfolio.fileserver.model.response.BaseServerResponse
 import org.portfolio.fileserver.repository.FilesRepository
 import org.slf4j.LoggerFactory
 import org.springframework.core.io.buffer.DataBufferUtils
@@ -58,13 +60,15 @@ class DownloadFileHandler(private val fs: FileSystem,
     private fun handleErrors(error: Throwable): Mono<ServerResponse> {
         return when (error) {
             is CouldNotFindFileException -> {
-                ServerResponse.status(HttpStatus.NOT_FOUND).body(Mono.just(error.message!!))
+                ServerResponse.status(HttpStatus.NOT_FOUND)
+                        .body(Mono.just(BaseServerResponse(ServerResponseCode.FILE_NOT_FOUND.value, error.message!!)))
             }
 
             else -> {
                 logger.error("Unhandled exception", error)
                 val msg = error.message ?: "Unknown error"
-                ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Mono.just(msg))
+                ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(Mono.just(BaseServerResponse(ServerResponseCode.UNKNOWN_ERROR.value, msg)))
             }
         }
     }

@@ -4,9 +4,12 @@ import com.mongodb.ConnectionString
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.portfolio.fileserver.config.DB_SERVER_ADDRESS
+import org.portfolio.fileserver.model.ServerResponseCode
+import org.portfolio.fileserver.model.response.UploadFileHandlerResponse
 import org.portfolio.fileserver.repository.FilesRepository
 import org.portfolio.fileserver.service.GeneratorServiceImpl
 import org.springframework.core.io.ByteArrayResource
@@ -83,22 +86,25 @@ class UploadFileHandlerTest {
         val webClient = getWebTestClient()
         val file = createMultipartFile()
 
-        val result = webClient
+        val response = webClient
                 .post()
                 .uri("v1/api/upload")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(file))
                 .exchange()
                 .expectStatus().is2xxSuccessful
-                .expectBody(String::class.java).returnResult().responseBody!!
+                .expectBody(UploadFileHandlerResponse::class.java).returnResult().responseBody!!
 
-        StepVerifier.create(repo.findById(result))
+        assertEquals(ServerResponseCode.OK.value, response.code)
+        val uploadedFileName = response.uploadedFileName!!
+
+        StepVerifier.create(repo.findById(uploadedFileName))
                 .assertNext { storedFile ->
-                    assert(result == storedFile.newFileName)
+                    assertEquals(storedFile.newFileName, uploadedFileName)
                 }
                 .verifyComplete()
 
-        fs.delete(Path(fileDirectoryPath, result), false)
+        fs.delete(Path(fileDirectoryPath, uploadedFileName), false)
         repo.clear().block()
     }
 
@@ -107,16 +113,17 @@ class UploadFileHandlerTest {
         val webClient = getWebTestClient()
         val file = createEmptyMultipartFile()
 
-        val errorMessage = webClient
+        val response = webClient
                 .post()
                 .uri("v1/api/upload")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(file))
                 .exchange()
                 .expectStatus().isBadRequest
-                .expectBody(String::class.java).returnResult().responseBody!!
+                .expectBody(UploadFileHandlerResponse::class.java).returnResult().responseBody!!
 
-        assert("The request does not contain \"file\" part" == errorMessage)
+        assertEquals(ServerResponseCode.NO_FILE_TO_UPLOAD.value, response.code)
+        assertEquals("The request does not contain \"file\" part", response.message)
     }
 
     @Test
@@ -124,16 +131,17 @@ class UploadFileHandlerTest {
         val webClient = getWebTestClient()
         val file = createVeryBigMultipartFile()
 
-        val errorMessage = webClient
+        val response = webClient
                 .post()
                 .uri("v1/api/upload")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(file))
                 .exchange()
                 .expectStatus().isBadRequest
-                .expectBody(String::class.java).returnResult().responseBody!!
+                .expectBody(UploadFileHandlerResponse::class.java).returnResult().responseBody!!
 
-        println(errorMessage)
+        assertEquals(ServerResponseCode.MAX_FILE_SIZE_EXCEEDED.value, response.code)
+        assertEquals(true, response.message!!.startsWith("The size of the file"))
     }
 }
 
