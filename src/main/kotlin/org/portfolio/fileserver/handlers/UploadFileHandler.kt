@@ -57,7 +57,7 @@ class UploadFileHandler(private val fs: FileSystem,
         return part to originalName
     }
 
-    private fun waitForRemainingParts(it: Pair<Part, String>): Mono<Tuple2<MutableList<DataBuffer>, String>>? {
+    private fun waitForRemainingParts(it: Pair<Part, String>): Mono<Tuple2<MutableList<DataBuffer>, String>> {
         val part = it.first
         val originalName = it.second
 
@@ -92,7 +92,7 @@ class UploadFileHandler(private val fs: FileSystem,
         val fullPath = Path(fileDirectoryPath, newFileName)
 
         //use "use" function so we don't forget to close the streams
-        fs.create(fullPath).use { outputStream ->
+        fs.create(fullPath, true).use { outputStream ->
             for (data in partsList) {
                 data.asInputStream().use { inputStream ->
                     val chunkSize = inputStream.available()
@@ -141,8 +141,8 @@ class UploadFileHandler(private val fs: FileSystem,
             is IOException -> {
                 logger.error("Unhandled exception", error)
                 val msg = error.message ?: "IOException while trying to store the file"
-                ServerResponse.unprocessableEntity().
-                        body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.UNKNOWN_ERROR.value, msg)))
+                ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.UNKNOWN_ERROR.value, msg)))
             }
 
             else -> {
