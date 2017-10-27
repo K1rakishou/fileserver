@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>Title</title>
-    <script src="./dropzone.js"></script>
-    <link href="./dropzone.css" type="text/css" rel="stylesheet">
+    <script src="dropzone.js"></script>
+    <link href="dropzone.css" type="text/css" rel="stylesheet">
+
 </head>
 <body>
-<form action="/v1/api/upload" method="POST" class="dropzone" id="my-dropzone">
-    <div class="fallback">
-        <input name="file" type="file" multiple />
-        <input type="submit" value="Upload" />
-    </div>
+<form action="/v1/api/upload" method="post" enctype="multipart/form-data" >
+    <p><input type="file" name="file" class="dropzone">
+    <p><button type="submit">Submit</button>
 </form>
 </body>
 </html>
