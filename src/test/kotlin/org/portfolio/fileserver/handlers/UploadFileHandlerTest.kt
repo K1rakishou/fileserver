@@ -1,9 +1,6 @@
 package org.portfolio.fileserver.handlers
 
 import com.mongodb.ConnectionString
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.fs.Path
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,20 +23,19 @@ import org.springframework.util.MultiValueMap
 import org.springframework.web.reactive.function.BodyInserters
 import org.springframework.web.reactive.function.server.router
 import reactor.test.StepVerifier
+import java.io.File
 
 @RunWith(SpringRunner::class)
 class UploadFileHandlerTest {
-
-    val fs = FileSystem.newInstance(Configuration())
     val template = ReactiveMongoTemplate(SimpleReactiveMongoDatabaseFactory(
             ConnectionString("mongodb://$DB_SERVER_ADDRESS/fileserver")))
     val repo = FilesRepository(template)
     val generator = GeneratorServiceImpl()
 
-    private var fileDirectoryPath = Path(fs.homeDirectory, "files")
+    private var fileDirectoryPath = "D:\\files"
 
     private fun getWebTestClient(): WebTestClient {
-        val uploadFileHandler = UploadFileHandler(fs, repo, generator)
+        val uploadFileHandler = UploadFileHandler(repo, generator)
 
         return WebTestClient.bindToRouterFunction(router {
             "/v1".nest {
@@ -104,7 +100,9 @@ class UploadFileHandlerTest {
                 }
                 .verifyComplete()
 
-        fs.delete(Path(fileDirectoryPath, uploadedFileName), false)
+        val path = "$fileDirectoryPath\\${response.uploadedFileName}"
+
+        File(path).delete()
         repo.clear().block()
     }
 

@@ -1,6 +1,6 @@
 package org.portfolio.fileserver.model.response
 
-import org.codehaus.jackson.annotate.JsonProperty
+import com.fasterxml.jackson.annotation.JsonProperty
 
 class UploadFileHandlerResponse(@JsonProperty("uploaded_file_name")
                                 val uploadedFileName: String?,

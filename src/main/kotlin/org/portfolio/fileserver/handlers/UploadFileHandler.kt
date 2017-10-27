@@ -1,7 +1,5 @@
 package org.portfolio.fileserver.handlers
 
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.fs.Path
 import org.portfolio.fileserver.extensions.extractExtension
 import org.portfolio.fileserver.model.ServerResponseCode
 import org.portfolio.fileserver.model.StoredFile
@@ -20,15 +18,15 @@ import org.springframework.web.reactive.function.server.ServerResponse
 import org.springframework.web.reactive.function.server.body
 import reactor.core.publisher.Mono
 import reactor.util.function.Tuple2
+import java.io.File
 import java.io.IOException
 
-class UploadFileHandler(private val fs: FileSystem,
-                        private val repo: FilesRepository,
+class UploadFileHandler(private val repo: FilesRepository,
                         private val generator: GeneratorService) {
 
     private val maxFileSize = 5242880L //5MB
     private val logger = LoggerFactory.getLogger(UploadFileHandler::class.java)
-    private var fileDirectoryPath = Path(fs.homeDirectory, "files")
+    private var fileDirectoryPath = "D:\\files"
     private val uploadingFilePartName = "file"
 
     fun handleFileUpload(request: ServerRequest): Mono<ServerResponse> {
@@ -89,10 +87,11 @@ class UploadFileHandler(private val fs: FileSystem,
             "$generatedName.$extension"
         }
 
-        val fullPath = Path(fileDirectoryPath, newFileName)
+        val fullPath = "$fileDirectoryPath\\$newFileName"
+        val outFile = File(fullPath)
 
         //use "use" function so we don't forget to close the streams
-        fs.create(fullPath, true).use { outputStream ->
+        outFile.outputStream().use { outputStream ->
             for (data in partsList) {
                 data.asInputStream().use { inputStream ->
                     val chunkSize = inputStream.available()
@@ -100,7 +99,7 @@ class UploadFileHandler(private val fs: FileSystem,
 
                     //copy chunks from one stream to another
                     inputStream.read(buffer, 0, chunkSize)
-                    outputStream.wrappedStream.write(buffer, 0, chunkSize)
+                    outputStream.write(buffer, 0, chunkSize)
                 }
             }
         }

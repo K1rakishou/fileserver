@@ -1,7 +1,5 @@
 package org.portfolio.fileserver.handlers
 
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.fs.Path
 import org.portfolio.fileserver.model.ServerResponseCode
 import org.portfolio.fileserver.model.StoredFile
 import org.portfolio.fileserver.model.response.BaseServerResponse
@@ -16,14 +14,14 @@ import org.springframework.web.reactive.function.server.ServerResponse
 import org.springframework.web.reactive.function.server.body
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import java.io.File
 
-class DownloadFileHandler(private val fs: FileSystem,
-                          private val repo: FilesRepository) {
+class DownloadFileHandler(private val repo: FilesRepository) {
 
     private val logger = LoggerFactory.getLogger(DownloadFileHandler::class.java)
     private val readChuckSize = 16384
     private val fileNamePathVariable = "file_name"
-    private var fileDirectoryPath = Path(fs.homeDirectory, "files")
+    private var fileDirectoryPath = "D:\\files"
 
     fun handleFileDownload(request: ServerRequest): Mono<ServerResponse> {
         return Mono.just(request.pathVariable(fileNamePathVariable))
@@ -46,7 +44,8 @@ class DownloadFileHandler(private val fs: FileSystem,
 
     private fun serveFile(storedFile: StoredFile): Mono<ServerResponse> {
         val bufferFlux = Flux.using({
-            return@using fs.open(Path(fileDirectoryPath, storedFile.newFileName))
+            val path = "$fileDirectoryPath\\${storedFile.newFileName}"
+            return@using File(path).inputStream()
         }, { inputStream ->
             return@using DataBufferUtils.read(inputStream, DefaultDataBufferFactory(false, readChuckSize), readChuckSize)
         }, { inputStream ->

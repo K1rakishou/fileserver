@@ -2,8 +2,6 @@ package org.portfolio.fileserver.config
 
 import com.mongodb.ConnectionString
 import com.samskivert.mustache.Mustache
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
 import org.portfolio.fileserver.handlers.DownloadFileHandler
 import org.portfolio.fileserver.handlers.UploadFileHandler
 import org.portfolio.fileserver.repository.FilesRepository
@@ -37,9 +35,6 @@ fun myBeans() = beans {
                         ConnectionString("mongodb://$DB_SERVER_ADDRESS/fileserver")
                 )
         )
-    }
-    bean<FileSystem> {
-        FileSystem.newInstance(Configuration())
     }
     bean("webHandler") {
         RouterFunctions.toWebHandler(ref<Router>().setUpRouter(), HandlerStrategies.builder().viewResolver(ref()).build())
