@@ -3,8 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <title>Title</title>
+    <script src="./dropzone.js"></script>
+    <link href="./dropzone.css" type="text/css" rel="stylesheet">
 </head>
 <body>
-<h1 style="text-align: center;"><span style="color: #000000;"><strong>It works!</strong></span></h1>
+<form action="/v1/api/upload" method="POST" class="dropzone" id="my-dropzone">
+    <div class="fallback">
+        <input name="file" type="file" multiple />
+        <input type="submit" value="Upload" />
+    </div>
+</form>
 </body>
 </html>

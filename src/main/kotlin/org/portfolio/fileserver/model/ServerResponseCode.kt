@@ -5,5 +5,6 @@ enum class ServerResponseCode(val value: Int) {
     OK(0),
     NO_FILE_TO_UPLOAD(1),
     MAX_FILE_SIZE_EXCEEDED(2),
-    FILE_NOT_FOUND(3)
+    FILE_NOT_FOUND(3),
+    BAD_MEDIA_TYPE(4)
 }

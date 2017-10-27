@@ -9,6 +9,7 @@ import org.portfolio.fileserver.service.GeneratorService
 import org.slf4j.LoggerFactory
 import org.springframework.core.io.buffer.DataBuffer
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.codec.multipart.FilePart
 import org.springframework.http.codec.multipart.Part
 import org.springframework.util.MultiValueMap
@@ -30,6 +31,15 @@ class UploadFileHandler(private val repo: FilesRepository,
     private val uploadingFilePartName = "file"
 
     fun handleFileUpload(request: ServerRequest): Mono<ServerResponse> {
+        println("New request from ${request.headers().host()}")
+
+        val isMultipartFormData = request.headers().contentType().get().includes(MediaType.MULTIPART_FORM_DATA)
+        if (!isMultipartFormData) {
+            return ServerResponse.badRequest()
+                    .body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.BAD_MEDIA_TYPE.value,
+                            "Request must have mediaType ${MediaType.MULTIPART_FORM_DATA_VALUE}")))
+        }
+
         return request.body(BodyExtractors.toMultipartData())
                 .map(this::checkFileToUploadExists)
                 .flatMap(this::waitForRemainingParts)

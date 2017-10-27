@@ -2,6 +2,7 @@ package org.portfolio.fileserver.routers
 
 import org.portfolio.fileserver.handlers.DownloadFileHandler
 import org.portfolio.fileserver.handlers.UploadFileHandler
+import org.springframework.core.io.ClassPathResource
 import org.springframework.http.MediaType
 import org.springframework.http.MediaType.TEXT_HTML
 import org.springframework.web.reactive.function.server.ServerResponse
@@ -25,5 +26,6 @@ class Router(private val uploadFileHandler: UploadFileHandler,
                 }
             }
         }
+        resources("/**", ClassPathResource("static/"))
     }
 }
