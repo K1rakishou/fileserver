@@ -33,6 +33,12 @@ class UploadFileHandler(private val repo: FilesRepository,
     fun handleFileUpload(request: ServerRequest): Mono<ServerResponse> {
         println("New request from ${request.headers().host()}")
 
+        if (!request.headers().contentType().isPresent) {
+            return ServerResponse.badRequest()
+                    .body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.NO_HEADERS.value,
+                            "Request must have headers")))
+        }
+
         val isMultipartFormData = request.headers().contentType().get().includes(MediaType.MULTIPART_FORM_DATA)
         if (!isMultipartFormData) {
             return ServerResponse.badRequest()
@@ -70,6 +76,11 @@ class UploadFileHandler(private val repo: FilesRepository,
         val originalName = it.second
 
         val partsListMono = part.content()
+                .doOnNext {
+                    if (it.readableByteCount() == 0)  {
+                        throw EmptyFileException()
+                    }
+                }
                 .buffer()
                 .single()
 
@@ -146,6 +157,8 @@ class UploadFileHandler(private val repo: FilesRepository,
                     .body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.NO_FILE_TO_UPLOAD.value, error.message!!)))
             is MaxFilesSizeExceededException -> ServerResponse.badRequest()
                     .body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.MAX_FILE_SIZE_EXCEEDED.value, error.message!!)))
+            is EmptyFileException -> ServerResponse.badRequest()
+                    .body(Mono.just(UploadFileHandlerResponse.fail(ServerResponseCode.EMPTY_FILE.value, error.message!!)))
 
             is IOException -> {
                 logger.error("Unhandled exception", error)
@@ -166,6 +179,7 @@ class UploadFileHandler(private val repo: FilesRepository,
     data class FileInfo(val newFileName: String,
                         val originalName: String)
 
+    class EmptyFileException : Exception("The file is empty")
     class NoFileToUploadException : Exception("The request does not contain \"file\" part")
     class MaxFilesSizeExceededException(fileSize: Long, maxSize: Long) : Exception("The size of the file " +
             "(${fileSize.toFloat() / (1024 * 1024)} MB) exceeds the limit (${maxSize.toFloat() / (1024 * 1024)} MB)")
