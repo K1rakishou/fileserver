@@ -1,6 +1,7 @@
 package org.portfolio.fileserver.handlers
 
 import org.portfolio.fileserver.extensions.extractExtension
+import org.portfolio.fileserver.extensions.toHex
 import org.portfolio.fileserver.model.ServerResponseCode
 import org.portfolio.fileserver.model.StoredFile
 import org.portfolio.fileserver.model.response.UploadFileHandlerResponse
@@ -17,10 +18,13 @@ import org.springframework.web.reactive.function.BodyExtractors
 import org.springframework.web.reactive.function.server.ServerRequest
 import org.springframework.web.reactive.function.server.ServerResponse
 import org.springframework.web.reactive.function.server.body
+import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.util.function.Tuple2
 import java.io.File
 import java.io.IOException
+import java.security.MessageDigest
+
 
 class UploadFileHandler(private val repo: FilesRepository,
                         private val generator: GeneratorService) {
@@ -46,13 +50,91 @@ class UploadFileHandler(private val repo: FilesRepository,
                             "Request must have mediaType ${MediaType.MULTIPART_FORM_DATA_VALUE}")))
         }
 
-        return request.body(BodyExtractors.toMultipartData())
+        val allFilePartsMono = request.body(BodyExtractors.toMultipartData())
                 .map(this::checkFileToUploadExists)
                 .flatMap(this::waitForRemainingParts)
                 .doOnSuccess(this::checkFileSize)
-                .flatMap(this::writeToStorage)
+                .flux()
+                .share()
+
+        //calculate file md5
+        val md5Mono = allFilePartsMono
+                .map {
+                    val partsList = it.t1
+                    val md5Instance = MessageDigest.getInstance("MD5")
+
+                    for (part in partsList) {
+                        val byteArray = part.asByteBuffer().array()
+                        md5Instance.update(byteArray, 0, byteArray.size)
+                    }
+
+                    return@map md5Instance.digest().toHex()
+                }
+                .share()
+
+        //try to find file in the DB by md5
+        val fileInDbMono = md5Mono
+                .flatMap { repo.findByMd5(it) }
+                .publish()
+                .autoConnect(2)
+
+        //if found - just return it's name
+        val fileFoundInDbMono = fileInDbMono
+                .filter { !it.isEmpty() }
+                .map {
+                    return@map it.newFileName
+                }
+
+        //if not found - save file to the disk, and to the DB
+        val fileNotFoundInDbMono = Flux.zip(fileInDbMono, allFilePartsMono, md5Mono)
+                .filter { it.t1.isEmpty() }
+                .flatMap {
+                    val partsList = it.t2.t1
+                    val originalFileName = it.t2.t2
+                    val fileMd5 = it.t3
+
+                    val generatedName = generator.generateNewFileName()
+
+                    //if the file does not have a name (what?) then give it a name
+                    val originalName = if (originalFileName.isNotEmpty()) {
+                        originalFileName
+                    } else {
+                        generatedName
+                    }
+
+                    val extension = originalName.extractExtension()
+
+                    //if the file does not have an extension then just don't use it
+                    val newFileName = if (extension.isEmpty()) {
+                        generatedName
+                    } else {
+                        "$generatedName.$extension"
+                    }
+
+                    val fullPath = "$fileDirectoryPath\\$newFileName"
+                    val outFile = File(fullPath)
+
+                    //use "use" function so we don't forget to close the streams
+                    outFile.outputStream().use { outputStream ->
+                        for (data in partsList) {
+                            data.asInputStream().use { inputStream ->
+                                val chunkSize = inputStream.available()
+                                val buffer = ByteArray(chunkSize)
+
+                                //copy chunks from one stream to another
+                                inputStream.read(buffer, 0, chunkSize)
+                                outputStream.write(buffer, 0, chunkSize)
+                            }
+                        }
+                    }
+
+                    return@flatMap Mono.just(FileInfo(newFileName, originalName, fileMd5))
+                }
                 .flatMap(this::saveFileInfoToRepo)
                 .map { it.t2 }
+
+        return Flux.merge(fileFoundInDbMono, fileNotFoundInDbMono)
+                .single()
                 .flatMap(this::sendResponse)
                 .onErrorResume(this::handleErrors)
     }
@@ -77,7 +159,7 @@ class UploadFileHandler(private val repo: FilesRepository,
 
         val partsListMono = part.content()
                 .doOnNext {
-                    if (it.readableByteCount() == 0)  {
+                    if (it.readableByteCount() == 0) {
                         throw EmptyFileException()
                     }
                 }
@@ -85,47 +167,6 @@ class UploadFileHandler(private val repo: FilesRepository,
                 .single()
 
         return Mono.zip(partsListMono, Mono.just(originalName))
-    }
-
-    private fun writeToStorage(it: Tuple2<MutableList<DataBuffer>, String>): Mono<FileInfo> {
-        val partsList = it.t1
-        val origName = it.t2
-        val generatedName = generator.generateNewFileName()
-
-        //if the file does not have a name (what?) then give it a name
-        val originalName = if (origName.isNotEmpty()) {
-            origName
-        } else {
-            generatedName
-        }
-
-        val extension = originalName.extractExtension()
-
-        //if the file does not have an extension then just don't use it
-        val newFileName = if (extension.isEmpty()) {
-            generatedName
-        } else {
-            "$generatedName.$extension"
-        }
-
-        val fullPath = "$fileDirectoryPath\\$newFileName"
-        val outFile = File(fullPath)
-
-        //use "use" function so we don't forget to close the streams
-        outFile.outputStream().use { outputStream ->
-            for (data in partsList) {
-                data.asInputStream().use { inputStream ->
-                    val chunkSize = inputStream.available()
-                    val buffer = ByteArray(chunkSize)
-
-                    //copy chunks from one stream to another
-                    inputStream.read(buffer, 0, chunkSize)
-                    outputStream.write(buffer, 0, chunkSize)
-                }
-            }
-        }
-
-        return Mono.just(FileInfo(newFileName, originalName))
     }
 
     private fun checkFileSize(it: Tuple2<MutableList<DataBuffer>, String>) {
@@ -136,12 +177,14 @@ class UploadFileHandler(private val repo: FilesRepository,
 
         if (fileSize > maxFileSize) {
             throw MaxFilesSizeExceededException(fileSize, maxFileSize)
+        } else if (fileSize == 0L) {
+            throw EmptyFileException()
         }
     }
 
     private fun saveFileInfoToRepo(fileInfo: FileInfo): Mono<Tuple2<StoredFile, String>> {
         val repoResult = repo.save(StoredFile(fileInfo.newFileName,
-                fileInfo.originalName, System.currentTimeMillis()))
+                fileInfo.originalName, System.currentTimeMillis(), fileInfo.fileMd5))
 
         return Mono.zip(repoResult, Mono.just(fileInfo.newFileName))
     }
@@ -177,7 +220,8 @@ class UploadFileHandler(private val repo: FilesRepository,
     }
 
     data class FileInfo(val newFileName: String,
-                        val originalName: String)
+                        val originalName: String,
+                        val fileMd5: String)
 
     class EmptyFileException : Exception("The file is empty")
     class NoFileToUploadException : Exception("The request does not contain \"file\" part")
