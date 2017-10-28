@@ -121,6 +121,7 @@ class UploadFileHandlerTest {
                 .expectBody(UploadFileHandlerResponse::class.java).returnResult().responseBody!!
 
         assertEquals(ServerResponseCode.NO_FILE_TO_UPLOAD.value, response.code)
+        assertEquals(null, response.uploadedFileName)
         assertEquals("The request does not contain \"file\" part", response.message)
     }
 
@@ -139,7 +140,40 @@ class UploadFileHandlerTest {
                 .expectBody(UploadFileHandlerResponse::class.java).returnResult().responseBody!!
 
         assertEquals(ServerResponseCode.MAX_FILE_SIZE_EXCEEDED.value, response.code)
+        assertEquals(null, response.uploadedFileName)
         assertEquals(true, response.message!!.startsWith("The size of the file"))
+    }
+
+    @Test
+    fun `test upload when uploading the same file twice should not write it to disk the second time`() {
+        val webClient = getWebTestClient()
+        val file = createMultipartFile()
+
+        val response1 = webClient
+                .post()
+                .uri("v1/api/upload")
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(file))
+                .exchange()
+                .expectStatus().is2xxSuccessful
+                .expectBody(UploadFileHandlerResponse::class.java).returnResult().responseBody!!
+
+        val response2 = webClient
+                .post()
+                .uri("v1/api/upload")
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(file))
+                .exchange()
+                .expectStatus().is2xxSuccessful
+                .expectBody(UploadFileHandlerResponse::class.java).returnResult().responseBody!!
+
+        assertEquals(ServerResponseCode.OK.value, response1.code)
+        assertEquals(ServerResponseCode.OK.value, response2.code)
+        assertEquals(true, response1.uploadedFileName == response2.uploadedFileName)
+
+        val path = "$fileDirectoryPath\\${response1.uploadedFileName}"
+        File(path).delete()
+        repo.clear().block()
     }
 }
 
