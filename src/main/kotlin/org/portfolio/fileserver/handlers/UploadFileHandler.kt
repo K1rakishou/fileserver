@@ -21,6 +21,7 @@ import org.springframework.web.reactive.function.server.body
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.util.function.Tuple2
+import reactor.util.function.Tuple3
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -58,22 +59,12 @@ class UploadFileHandler(private val repo: FilesRepository,
                 .share()
 
         //calculate file md5
-        val md5Mono = allFilePartsMono
-                .map {
-                    val partsList = it.t1
-                    val md5Instance = MessageDigest.getInstance("MD5")
-
-                    for (part in partsList) {
-                        val byteArray = part.asByteBuffer().array()
-                        md5Instance.update(byteArray, 0, byteArray.size)
-                    }
-
-                    return@map md5Instance.digest().toHex()
-                }
+        val fileMd5Mono = allFilePartsMono
+                .map(this::calcMd5)
                 .share()
 
         //try to find file in the DB by md5
-        val fileInDbMono = md5Mono
+        val fileInDbMono = fileMd5Mono
                 .flatMap { repo.findByMd5(it) }
                 .publish()
                 .autoConnect(2)
@@ -85,51 +76,10 @@ class UploadFileHandler(private val repo: FilesRepository,
                     return@map it.newFileName
                 }
 
-        //if not found - save file to the disk, and to the DB
-        val fileNotFoundInDbMono = Flux.zip(fileInDbMono, allFilePartsMono, md5Mono)
+        //if not found - write file to the disk, and save file info to the DB
+        val fileNotFoundInDbMono = Flux.zip(fileInDbMono, allFilePartsMono, fileMd5Mono)
                 .filter { it.t1.isEmpty() }
-                .flatMap {
-                    val partsList = it.t2.t1
-                    val originalFileName = it.t2.t2
-                    val fileMd5 = it.t3
-
-                    val generatedName = generator.generateNewFileName()
-
-                    //if the file does not have a name (what?) then give it a name
-                    val originalName = if (originalFileName.isNotEmpty()) {
-                        originalFileName
-                    } else {
-                        generatedName
-                    }
-
-                    val extension = originalName.extractExtension()
-
-                    //if the file does not have an extension then just don't use it
-                    val newFileName = if (extension.isEmpty()) {
-                        generatedName
-                    } else {
-                        "$generatedName.$extension"
-                    }
-
-                    val fullPath = "$fileDirectoryPath\\$newFileName"
-                    val outFile = File(fullPath)
-
-                    //use "use" function so we don't forget to close the streams
-                    outFile.outputStream().use { outputStream ->
-                        for (data in partsList) {
-                            data.asInputStream().use { inputStream ->
-                                val chunkSize = inputStream.available()
-                                val buffer = ByteArray(chunkSize)
-
-                                //copy chunks from one stream to another
-                                inputStream.read(buffer, 0, chunkSize)
-                                outputStream.write(buffer, 0, chunkSize)
-                            }
-                        }
-                    }
-
-                    return@flatMap Mono.just(FileInfo(newFileName, originalName, fileMd5))
-                }
+                .flatMap(this::writeFileToDisk)
                 .flatMap(this::saveFileInfoToRepo)
                 .map { it.t2 }
 
@@ -137,6 +87,61 @@ class UploadFileHandler(private val repo: FilesRepository,
                 .single()
                 .flatMap(this::sendResponse)
                 .onErrorResume(this::handleErrors)
+    }
+
+    private fun writeFileToDisk(it: Tuple3<StoredFile, Tuple2<MutableList<DataBuffer>, String>, String>): Mono<FileInfo>? {
+        val partsList = it.t2.t1
+        val originalFileName = it.t2.t2
+        val fileMd5 = it.t3
+
+        val generatedName = generator.generateNewFileName()
+
+        //if the file does not have a name (what?) then give it a name
+        val originalName = if (originalFileName.isNotEmpty()) {
+            originalFileName
+        } else {
+            generatedName
+        }
+
+        val extension = originalName.extractExtension()
+
+        //if the file does not have an extension then just don't use it
+        val newFileName = if (extension.isEmpty()) {
+            generatedName
+        } else {
+            "$generatedName.$extension"
+        }
+
+        val fullPath = "$fileDirectoryPath\\$newFileName"
+        val outFile = File(fullPath)
+
+        //use "use" function so we don't forget to close the streams
+        outFile.outputStream().use { outputStream ->
+            for (data in partsList) {
+                data.asInputStream().use { inputStream ->
+                    val chunkSize = inputStream.available()
+                    val buffer = ByteArray(chunkSize)
+
+                    //copy chunks from one stream to another
+                    inputStream.read(buffer, 0, chunkSize)
+                    outputStream.write(buffer, 0, chunkSize)
+                }
+            }
+        }
+
+        return Mono.just(FileInfo(newFileName, originalName, fileMd5))
+    }
+
+    private fun calcMd5(it: Tuple2<MutableList<DataBuffer>, String>): String {
+        val partsList = it.t1
+        val md5Instance = MessageDigest.getInstance("MD5")
+
+        for (part in partsList) {
+            val byteArray = part.asByteBuffer().array()
+            md5Instance.update(byteArray, 0, byteArray.size)
+        }
+
+        return md5Instance.digest().toHex()
     }
 
     private fun checkFileToUploadExists(mvm: MultiValueMap<String, Part>): Pair<Part, String> {
