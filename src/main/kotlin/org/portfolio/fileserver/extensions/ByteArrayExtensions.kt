@@ -2,7 +2,7 @@ package org.portfolio.fileserver.extensions
 
 private val HEX_CHARS = "0123456789ABCDEF".toCharArray()
 
-fun ByteArray.toHex() : String{
+fun ByteArray.toHex(): String {
     val result = StringBuffer()
 
     forEach {

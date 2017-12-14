@@ -3,27 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>Title</title>
-    <script src="dropzone.js"></script>
-    <link href="dropzone.css" type="text/css" rel="stylesheet">
-    <script>Dropzone.autoDiscover = false;
-    </script>
 </head>
 <body>
-<div id="myId" class="dropzone"/>
-<script>
-    var myDropzone = new Dropzone("div#myId", {
-        url: "v1/api/upload",
-        paramName: "file", // The name that will be used to transfer the file
-        maxFilesize: 2, // MB
-        headers: {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
-        },
-        success: function(file,responseText) {
-            var link = document.createElement("a");
-            link.innerHTML = "http://176.99.158.208:8080/v1/api/download/"; + responseText.uploaded_file_name;
-            file.previewTemplate.appendChild(link);
-        }
-    });
-</script>
+<h1 style="text-align: center;">It works!</h1>
 </body>
 </html>
